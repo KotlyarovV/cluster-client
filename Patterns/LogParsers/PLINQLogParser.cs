@@ -8,7 +8,9 @@ namespace Patterns.LogParsers
     {
         public KeyValuePair<string, int>[] GetTop10Users(string logPath)
         {
-            return File.ReadLines(logPath).AsParallel()
+            return File
+                .ReadLines(logPath)
+                .AsParallel()
                 .Select(IpInfo.Parse)
                 .GroupBy(
                     g => g.Ip,

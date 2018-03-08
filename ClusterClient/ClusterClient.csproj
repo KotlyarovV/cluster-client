@@ -49,10 +49,15 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Clients\AllTogetherClusterClient.cs" />
     <Compile Include="Clients\ClusterClientBase.cs" />
     <Compile Include="Clients\RandomClusterClient.cs" />
+    <Compile Include="Clients\RoundRobinClient.cs" />
+    <Compile Include="Clients\SmartClient.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RequestReport.cs" />
+    <Compile Include="Statistic.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

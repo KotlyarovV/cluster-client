@@ -10,7 +10,9 @@ namespace Patterns.LogParsers
         {
             var usersStats = new Dictionary<string, int>();
 
-            File.ReadLines(logPath).AsParallel()
+            File
+                .ReadLines(logPath)
+                .AsParallel()
                 .Select(IpInfo.Parse)
                 .ForAll(ipInfo =>
                         {
@@ -23,8 +25,11 @@ namespace Patterns.LogParsers
                             }
                         });
 
-            return usersStats.AsParallel()
-                .OrderByDescending(keyValuePair => keyValuePair.Value).Take(10).ToArray();
+            return usersStats
+                .AsParallel()
+                .OrderByDescending(keyValuePair => keyValuePair.Value)
+                .Take(10)
+                .ToArray();
         }
     }
 }

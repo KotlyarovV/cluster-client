@@ -4,3 +4,9 @@
 packages/*
 *.user
 */logs/*
+AsyncSamples/*
+LockFree/*
+NMAP/*
+Patterns/*
+QuantumOfSwitching/*
+TPLSamples/*

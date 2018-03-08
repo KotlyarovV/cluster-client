@@ -17,16 +17,55 @@ namespace ClusterClient
             XmlConfigurator.Configure();
 
             string[] replicaAddresses;
-            if (!TryGetReplicaAddresses(args, out replicaAddresses))
-                return;
+            //            if (!TryGetReplicaAddresses(args, out replicaAddresses))
+            //                return;
+
+            replicaAddresses = new[]
+            {
+                "http://127.0.0.1:8060/qqq/",
+                "http://127.0.0.1:8010/qqq/",
+                "http://127.0.0.1:8020/qqq/"
+            };
+            
 
             try
             {
                 var clients = new ClusterClientBase[]
                               {
-                                  new RandomClusterClient(replicaAddresses)
+                                  new RandomClusterClient(replicaAddresses),
+                                  new AllTogetherClusterClient(replicaAddresses),
+                                  new RoundRobinClient(replicaAddresses),
+                                  new SmartClient(replicaAddresses) 
                               };
-                var queries = new[] {"От", "топота", "копыт", "пыль", "по", "полю", "летит", "На", "дворе", "трава", "на", "траве", "дрова"};
+                var queries = new[]
+                {
+                    "От",
+                    "топота",
+                    "копыт",
+                    "пыль",
+                    "по",
+                    "полю",
+                    "летит",
+                    "На",
+                    "дворе",
+                    "трава",
+                    "на",
+                    "траве",
+                    "дрова",
+                    "От",
+                    "топота",
+                    "копыт",
+                    "пыль",
+                    "по",
+                    "полю",
+                    "летит",
+                    "На",
+                    "дворе",
+                    "трава",
+                    "на",
+                    "траве",
+                    "дрова",
+                };
 
                 foreach (var client in clients)
                 {
@@ -38,7 +77,6 @@ namespace ClusterClient
                             try
                             {
                                 await client.ProcessRequestAsync(query, TimeSpan.FromSeconds(6));
-
                                 Console.WriteLine("Processed query \"{0}\" in {1} ms", query, timer.ElapsedMilliseconds);
                             }
                             catch (TimeoutException)
@@ -47,12 +85,14 @@ namespace ClusterClient
                             }
                         }).ToArray());
                     Console.WriteLine("Testing {0} finished", client.GetType());
+                    
                 }
             }
             catch (Exception e)
             {
                 Log.Fatal(e);
             }
+            Console.ReadKey();
         }
 
         private static bool TryGetReplicaAddresses(string[] args, out string[] replicaAddresses)
