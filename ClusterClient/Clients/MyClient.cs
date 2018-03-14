@@ -4,7 +4,6 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using ClusterClient.Extensions;
 using log4net;
 
 namespace ClusterClient.Clients
