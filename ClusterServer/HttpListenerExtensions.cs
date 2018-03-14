@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using log4net;
@@ -9,7 +10,10 @@ namespace ClusterServer
     {
         private static readonly ILog Log = LogManager.GetLogger(typeof(HttpListenerExtensions));
 
-        public async static Task StartProcessingRequestsAsync(this HttpListener listener, Func<HttpListenerContext, Task> callbackAsync)
+        public static async Task StartProcessingRequestsAsync(
+            this HttpListener listener, 
+            Func<HttpListenerContext, Task> callbackAsync,
+            Func<HttpListenerContext, Task> callbackAsyncOk)
         {
             listener.Start();
 
@@ -25,10 +29,19 @@ namespace ClusterServer
                             var ctx = context;
                             try
                             {
-                                await callbackAsync(ctx);
+                                
+                                if (ctx.Request.QueryString.AllKeys.Contains("stop"))
+                                {
+                                    await callbackAsyncOk(ctx);
+                                }
+                                else
+                                {
+                                    await callbackAsync(ctx);
+                                }                    
                             }
                             catch (Exception e)
                             {
+                                Console.WriteLine(e.Message);
                                 Log.Error(e);
                             }
                             finally

@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -11,6 +13,12 @@ namespace ClusterServer
 {
 	public static class Program
 	{
+        private static ConcurrentDictionary<string, CancellationTokenSource> Cancellations { get; } 
+            = new ConcurrentDictionary<string, CancellationTokenSource>();
+
+       // private static ConcurrentBag<string> StopedIds { get; }
+            
+
 		public static void Main(string[] args)
 		{
 			XmlConfigurator.Configure();
@@ -36,7 +44,7 @@ namespace ClusterServer
 				if(parsedArguments.Async)
 				{
 					log.InfoFormat("Press ENTER to stop listening");
-					listener.StartProcessingRequestsAsync(CreateAsyncCallback(parsedArguments));
+					listener.StartProcessingRequestsAsync(CreateAsyncCallback(parsedArguments), CreateAsyncCallbackOk(parsedArguments));
 
 					Console.ReadLine();
 					log.InfoFormat("Server stopped!");
@@ -52,34 +60,66 @@ namespace ClusterServer
 
 		private static Func<HttpListenerContext, Task> CreateAsyncCallback(ServerArguments parsedArguments)
 		{
-			return async context =>
+			return async (context) =>
 			{
-				var currentRequestNum = Interlocked.Increment(ref RequestsCount);
+			    var timer = Stopwatch.StartNew();
+			    //var time = Environment.TickCount;
+			    var id = context.Request.QueryString["id"];
+			    
+
+                var currentRequestNum = Interlocked.Increment(ref RequestsCount);
 				log.InfoFormat("Thread #{0} received request #{1} at {2}",
 					Thread.CurrentThread.ManagedThreadId, currentRequestNum, DateTime.Now.TimeOfDay);
 
-				await Task.Delay(parsedArguments.MethodDuration);
-//				Thread.Sleep(parsedArguments.MethodDuration);
 
-				var encryptedBytes = GetBase64HashBytes(context.Request.QueryString["query"], Encoding.UTF8);
+                Cancellations[id] = new CancellationTokenSource();
+                await Task.Delay(parsedArguments.MethodDuration, Cancellations[id].Token);
+                //				Thread.Sleep(parsedArguments.MethodDuration);
+       
+                var encryptedBytes = GetBase64HashBytes(context.Request.QueryString["query"], Encoding.UTF8);
 				await context.Response.OutputStream.WriteAsync(encryptedBytes, 0, encryptedBytes.Length);
 
 				log.InfoFormat("Thread #{0} sent response #{1} at {2}",
 					Thread.CurrentThread.ManagedThreadId, currentRequestNum,
 					DateTime.Now.TimeOfDay);
-			};
+
+			    Console.WriteLine("End running \"{0}\" in {1}", id, timer.ElapsedMilliseconds);
+            };
 		}
 
-		private static Action<HttpListenerContext> CreateSyncCallback(ServerArguments parsedArguments)
+
+
+	    private static Func<HttpListenerContext, Task> CreateAsyncCallbackOk(ServerArguments parsedArguments)
+	    {
+	        return async (context) =>
+	        {
+	            var time = Environment.TickCount;
+	            var id = context.Request.QueryString["id"];
+
+                Console.WriteLine("Start cancelling \"{0}\" ", id);
+
+	            if (Cancellations.TryGetValue(id, out var ctx))
+	            {
+	                ctx.Cancel();
+	                Cancellations.TryRemove(id, out _);
+	                var answer = Encoding.UTF8.GetBytes("STOPED");
+	                await context.Response.OutputStream.WriteAsync(answer, 0, answer.Length);
+                }
+                Console.WriteLine("End cancelling \"{0}\" in {1}", id, Environment.TickCount - time);               
+            };
+	    }
+
+
+        private static Action<HttpListenerContext> CreateSyncCallback(ServerArguments parsedArguments)
 		{
 			return context =>
 			{
 				var currentRequestId = Interlocked.Increment(ref RequestsCount);
 				log.InfoFormat("Thread #{0} received request #{1} at {2}",
 					Thread.CurrentThread.ManagedThreadId, currentRequestId, DateTime.Now.TimeOfDay);
-
-				Thread.Sleep(parsedArguments.MethodDuration);
-
+                
+                Thread.Sleep(parsedArguments.MethodDuration);
+    
 				var encryptedBytes = GetBase64HashBytes(context.Request.QueryString["query"], Encoding.UTF8);
 				context.Response.OutputStream.Write(encryptedBytes, 0, encryptedBytes.Length);
 
@@ -88,8 +128,8 @@ namespace ClusterServer
 					DateTime.Now.TimeOfDay);
 			};
 		}
-
-		private static readonly ILog log = LogManager.GetLogger(typeof(Program));
+	 
+        private static readonly ILog log = LogManager.GetLogger(typeof(Program));
 
 		private static byte[] GetBase64HashBytes(string query, Encoding encoding)
 		{

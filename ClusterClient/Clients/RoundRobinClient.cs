@@ -1,27 +1,17 @@
 ﻿using log4net;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ClusterClient.Clients
 {
-    class RoundRobinClient : ClusterClientBase
+    class RoundRobinClient : CleverClient
     {
-
-        //private readonly Random _random = new Random();
-        private readonly ConcurrentDictionary<string, Statistic> _replicasStat;
 
 
         public RoundRobinClient(string[] replicaAddresses) : base(replicaAddresses)
         {
-            _replicasStat = new ConcurrentDictionary<string, Statistic>();
-            foreach (var replica in replicaAddresses)
-            {
-                _replicasStat[replica] = new Statistic();
-            }
         }
 
         /*
@@ -30,50 +20,31 @@ namespace ClusterClient.Clients
         из аргумента на кол-во реплик и, используя вычисленный 
         таймаут, последовательно делать запросы к репликам.
         Если реплика не ответила за указанный таймаут, нужно переходить к следующей.
-        */
-        /*
-        public override async Task<string> ProcessRequestAsync(string query, TimeSpan timeout)
+        */                
+        public override async Task<Tuple<RequestReport, List<string>>> InspectTasks(
+            TimeSpan timeout, 
+            string query, 
+            Guid id)
         {
-            timeout = new TimeSpan(timeout.Ticks / ReplicaAddresses.Length);
-            Task<string> task = null;
-            
-            foreach (var replicaAddress in ReplicaAddresses.OrderBy(i => _random.Next()))
+            var usedReplicas = new List<string>();
+            var exeptions = new List<Exception>();
+            foreach (var replicaAddress in SortedReplicas)
             {
-                var uri = replicaAddress + "?query=" + query;
-                task = ProcessRequestAsync(uri);
+                var task = ProcessRequestWithTimeMesureAsync(replicaAddress, query, id);
                 await Task.WhenAny(task, Task.Delay(timeout));
-                if (task.IsCompleted)
-                    break;
+                usedReplicas.Add(replicaAddress);
+                if (!task.IsCompleted)
+                {
+                    GreyList[replicaAddress] = Environment.TickCount;
+                }
+                else if (task.IsFaulted)
+                {
+                    exeptions.Add(task.Exception);
+                }
+                else return Tuple.Create(task.Result, usedReplicas);
             }
 
-            if (task == null || !task.IsCompleted)
-                throw new TimeoutException();
-            
-            return task.Result;
-        }
-        */
-        public override async Task<string> ProcessRequestAsync(string query, TimeSpan timeout)
-        {
-            timeout = new TimeSpan(timeout.Ticks / ReplicaAddresses.Length);
-            Task<RequestReport> task = null;
-
-            var sortedReplicas = _replicasStat                
-                .OrderBy(replicaStat => replicaStat.Value.MiddleTime)
-                .Select(replicaStat => replicaStat.Key);
-
-            foreach (var replicaAddress in sortedReplicas)
-            {
-                task = ProcessRequestWithTimeMesureAsync(replicaAddress, query);
-                await Task.WhenAny(task, Task.Delay(timeout));
-                if (task.IsCompleted)
-                    break;
-            }
-
-            if (task == null || !task.IsCompleted)
-                throw ThrowTimeout(ReplicaAddresses.First());
-
-            _replicasStat[task.Result.Replica].AddTime(task.Result.Time);
-            return task.Result.Answer;
+            throw new AggregateException(exeptions);
         }
 
 

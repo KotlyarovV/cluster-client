@@ -35,7 +35,8 @@ namespace ClusterClient
                                   new RandomClusterClient(replicaAddresses),
                                   new AllTogetherClusterClient(replicaAddresses),
                                   new RoundRobinClient(replicaAddresses),
-                                  new SmartClient(replicaAddresses) 
+                                  new SmartClient(replicaAddresses),
+                                  new MyClient(replicaAddresses), 
                               };
                 var queries = new[]
                 {
@@ -44,39 +45,21 @@ namespace ClusterClient
                     "копыт",
                     "пыль",
                     "по",
-                    "полю",
-                    "летит",
-                    "На",
-                    "дворе",
-                    "трава",
-                    "на",
-                    "траве",
-                    "дрова",
-                    "От",
-                    "топота",
-                    "копыт",
-                    "пыль",
-                    "по",
-                    "полю",
-                    "летит",
-                    "На",
-                    "дворе",
-                    "трава",
-                    "на",
-                    "траве",
-                    "дрова",
+                    "полу",
+                    "летит"
                 };
 
                 foreach (var client in clients)
                 {
                     Console.WriteLine("Testing {0} started", client.GetType());
+                    
                     Task.WaitAll(queries.Select(
                         async query =>
                         {
                             var timer = Stopwatch.StartNew();
                             try
                             {
-                                await client.ProcessRequestAsync(query, TimeSpan.FromSeconds(6));
+                                await client.ProcessRequestAsync(query, TimeSpan.FromSeconds(20));
                                 Console.WriteLine("Processed query \"{0}\" in {1} ms", query, timer.ElapsedMilliseconds);
                             }
                             catch (TimeoutException)
@@ -92,9 +75,8 @@ namespace ClusterClient
             {
                 Log.Fatal(e);
             }
-            Console.ReadKey();
         }
-
+        //запрос к 1й - если не ответила - к 2м итд
         private static bool TryGetReplicaAddresses(string[] args, out string[] replicaAddresses)
         {
             var argumentsParser = new FluentCommandLineParser();

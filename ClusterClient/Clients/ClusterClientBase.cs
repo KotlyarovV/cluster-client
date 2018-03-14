@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -12,18 +13,32 @@ namespace ClusterClient.Clients
 {
     public abstract class ClusterClientBase
     {
-
         private readonly int _blockTime = 4000;
+
+        protected ClusterClientBase(string[] replicaAddresses)
+        {
+            ReplicaAddresses = replicaAddresses;
+            foreach (var replica in replicaAddresses)
+            {
+                GreyList[replica] = 0;  
+            }
+        }
+
+        protected ConcurrentDictionary<string, int> GreyList { get; } = new ConcurrentDictionary<string, int>();
+
+        protected void RefreshGreyList()
+        {
+            foreach (var item in GreyList)
+                if (item.Value + _blockTime < Environment.TickCount)
+                    GreyList[item.Key] = 0;
+        }
 
         private string[] _replicaAddresses;
         protected string[] ReplicaAddresses
         {
             get
             {
-                foreach (var item in GreyList)
-                    if (item.Value + _blockTime < Environment.TickCount)
-                        GreyList[item.Key] = 0;
-
+                RefreshGreyList();
                 return _replicaAddresses
                     .Where(replica => GreyList[replica] == 0)
                     .ToArray();
@@ -31,25 +46,14 @@ namespace ClusterClient.Clients
             private set { _replicaAddresses = value; }
         }
         
-        protected ConcurrentDictionary<string, int> GreyList { get; set; }
-
         protected TimeoutException ThrowTimeout(string replica)
         {
             GreyList[replica] = Environment.TickCount;
             return new TimeoutException();
         }
-
-        protected ClusterClientBase(string[] replicaAddresses)
-        {
-            GreyList = new ConcurrentDictionary<string, int>();
-            ReplicaAddresses = replicaAddresses;
-            foreach (var replica in replicaAddresses)
-            {
-                GreyList[replica] = 0;
-            }            
-        }
-
+        
         public abstract Task<string> ProcessRequestAsync(string query, TimeSpan timeout);
+
         protected abstract ILog Log { get; }
 
         protected static HttpWebRequest CreateRequest(string uriStr)
@@ -62,7 +66,7 @@ namespace ClusterClient.Clients
             return request;
         }
 
-        protected async Task<string> ProcessRequestAsync(WebRequest request)
+        public async Task<string> ProcessRequestAsync(WebRequest request)
         {
             var timer = Stopwatch.StartNew();
             using (var response = await request.GetResponseAsync())
@@ -79,17 +83,17 @@ namespace ClusterClient.Clients
             return await ProcessRequestAsync(request);
         }
 
-        protected async Task<RequestReport> ProcessRequestWithTimeMesureAsync(string replicaAddress, string query)
+        protected async Task ProcessStopRequest(string replicaAddress, Guid id)
         {
-            var uriStr = replicaAddress + "?query=" + query;
-            var nowTime = Environment.TickCount;
-
-            var request = CreateRequest(uriStr);
-            var answer = await ProcessRequestAsync(request);
-            var spendedTime = Environment.TickCount - nowTime;
-
-            return new RequestReport(answer, replicaAddress, spendedTime);
+            var uri = replicaAddress + "?id=" + id + "&stop=ok";
+            await ProcessRequestAsync(uri);
         }
+
+        protected async Task CancelTasks(IEnumerable<string> replicas, Guid id) => 
+            await Task.WhenAll(replicas.Select(ra => ProcessStopRequest(ra, id)));
+
+        protected string CreateRequestQuery(string replicaAddress, string query, Guid id) =>
+            replicaAddress + "?query=" + query + "&id=" + id;
     }
 
 }
