@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using ClusterClient.Extensions;
 using log4net;
 
 namespace ClusterClient.Clients
